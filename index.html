@@ -378,19 +378,31 @@ async function ensureListening(){
  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Safari necesita una página HTTPS o localhost para acceder al micrófono.");
  const AudioCtx=window.AudioContext||window.webkitAudioContext;
  if(!AudioCtx) throw new Error("Este navegador no admite Web Audio API.");
- if(!ctx)ctx=new AudioCtx();
  const existingStream=stream;
- const resumePromise=ctx.state==="suspended"?ctx.resume().then(()=>null,error=>error):Promise.resolve(null);
- const streamPromise=existingStream?Promise.resolve(existingStream):navigator.mediaDevices.getUserMedia({audio:true});
- const [activeStream,resumeError]=await Promise.all([streamPromise,resumePromise]);
- if(resumeError){
-  if(!existingStream)activeStream.getTracks().forEach(track=>track.stop());
-  throw resumeError;
+ const activeStream=existingStream||await navigator.mediaDevices.getUserMedia({audio:true});
+ let audioContext=ctx;
+ try{
+  // iOS Safari requires microphone capture to start before Web Audio selects
+  // its audio-session category; otherwise capture can be rejected.
+  if(!audioContext)audioContext=new AudioCtx();
+  if(audioContext.state==="suspended")await audioContext.resume();
+  const source=audioContext.createMediaStreamSource(activeStream);
+  const analyser=audioContext.createAnalyser();
+  analyser.fftSize=4096; analyser.smoothingTimeConstant=0;
+  const audioBuffer=new Float32Array(analyser.fftSize);
+  source.connect(analyser);
+  ctx=audioContext; stream=activeStream; src=source; an=analyser; buf=audioBuffer;
+  if(!raf) raf=requestAnimationFrame(process);
+ }catch(err){
+  if(!existingStream){
+   activeStream.getTracks().forEach(track=>track.stop());
+   stream=null;
+  }
+  if(audioContext&&!ctx){
+   try{await audioContext.close()}catch(_){}
+  }
+  throw err;
  }
- stream=activeStream;
- src=ctx.createMediaStreamSource(stream); an=ctx.createAnalyser();
- an.fftSize=4096; an.smoothingTimeConstant=0; buf=new Float32Array(an.fftSize); src.connect(an);
- if(!raf) raf=requestAnimationFrame(process);
 }
 async function activateListening(){
  const button=$("listen");
