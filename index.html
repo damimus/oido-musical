@@ -64,7 +64,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1
     </div>
   </div>
 </div>
-<div id="status" role="status" aria-live="polite"></div><div class="meter"><div id="bar"></div></div>
+<div id="status" role="status" aria-live="polite">Pulsa ● para permitir el micrófono y empezar a grabar.</div><div class="meter"><div id="bar"></div></div>
 </section>
 <section class="panel">
 <h2>Partitura en pentagrama</h2>
@@ -367,14 +367,26 @@ function exportMIDI(){
  a.href=url;a.download="melodia_detectada.mid";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-// Inicio y parada de grabación. Se definen explícitamente antes de enlazar los botones.
+// La activación del micrófono se solicita al tocar el botón de grabación.
 async function ensureListening(){
- if(an && stream && ctx){ if(ctx.state==="suspended") await ctx.resume(); return; }
+ if(an && stream && ctx){
+  if(ctx.state==="suspended") await ctx.resume();
+  return;
+ }
  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Safari necesita una página HTTPS o localhost para acceder al micrófono.");
- stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
  const AudioCtx=window.AudioContext||window.webkitAudioContext;
  if(!AudioCtx) throw new Error("Este navegador no admite Web Audio API.");
- ctx=new AudioCtx(); await ctx.resume(); src=ctx.createMediaStreamSource(stream); an=ctx.createAnalyser();
+ if(!ctx)ctx=new AudioCtx();
+ const existingStream=stream;
+ const resumePromise=ctx.state==="suspended"?ctx.resume().then(()=>null,error=>error):Promise.resolve(null);
+ const streamPromise=existingStream?Promise.resolve(existingStream):navigator.mediaDevices.getUserMedia({audio:true});
+ const [activeStream,resumeError]=await Promise.all([streamPromise,resumePromise]);
+ if(resumeError){
+  if(!existingStream)activeStream.getTracks().forEach(track=>track.stop());
+  throw resumeError;
+ }
+ stream=activeStream;
+ src=ctx.createMediaStreamSource(stream); an=ctx.createAnalyser();
  an.fftSize=4096; an.smoothingTimeConstant=0; buf=new Float32Array(an.fftSize); src.connect(an);
  if(!raf) raf=requestAnimationFrame(process);
 }
@@ -391,7 +403,10 @@ async function start(){
  }catch(err){
   startButton.disabled=false;stopButton.disabled=true;
   let msg=err&&err.message?err.message:String(err);
-  if(err&&err.name==="NotAllowedError")msg="Permiso de micrófono denegado. En Safari, ve a Ajustes > Sitios web > Micrófono.";
+  if(err&&err.name==="NotAllowedError")msg="Safari no permitió el micrófono. En iPhone, revisa Ajustes > Apps > Safari > Micrófono y el permiso del sitio; después recarga la página y vuelve a pulsar ●.";
+  else if(err&&err.name==="NotFoundError")msg="No se encontró un micrófono disponible en este dispositivo.";
+  else if(err&&err.name==="NotReadableError")msg="El micrófono está ocupado o no se puede usar. Cierra otras apps que lo estén utilizando y vuelve a intentarlo.";
+  else if(err&&err.name==="SecurityError")msg="El navegador bloqueó el micrófono. Abre esta página con HTTPS en Safari.";
   $("status").textContent="No se ha podido activar el micrófono: "+msg; console.error(err);
  }
 }
@@ -403,13 +418,7 @@ async function stop(){
  $("play").disabled=notes.length===0;$("midi").disabled=notes.length===0;updatePlaybackButtons();
  $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla.";
 }
-// Inicia la escucha previa al cargar la aplicación. La detección se muestra en pantalla,
-// pero no se registra ninguna nota hasta pulsar el botón de grabación.
-window.addEventListener("load",()=>{
- renderStaff();
- ensureListening().then(()=>{ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla."; })
- .catch(err=>{ $("status").textContent="Pulsa el micrófono de grabación para autorizar el acceso al audio."; console.warn("La escucha previa no pudo iniciarse automáticamente:",err); });
-});
+window.addEventListener("load",renderStaff);
 
 function updateTempoInfo(){const bpm=currentBpm(),info=$("tempoInfo");if(info)info.textContent=`A ${bpm} BPM, una negra dura ${(60/bpm).toFixed(2)} s. Las figuras, la reproducción y el archivo MIDI se ajustan a este tempo.`;if(metroOn)restartMetronome();}
 function clickMetronome(){if(!metroSoundOn)return;const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;if(!metroCtx)metroCtx=new Ctx();if(metroCtx.state==="suspended")metroCtx.resume();const t=metroCtx.currentTime,o=metroCtx.createOscillator(),g=metroCtx.createGain();o.type="sine";/* Tono grave por debajo de C3 (130,81 Hz): A1 = 55 Hz. */o.frequency.value=metroBeat===0?55:48;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.22,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.075);o.connect(g);g.connect(metroCtx.destination);o.start(t);o.stop(t+.08);}
