@@ -406,6 +406,7 @@ async function stop(){
 // Inicia la escucha previa al cargar la aplicación. La detección se muestra en pantalla,
 // pero no se registra ninguna nota hasta pulsar el botón de grabación.
 window.addEventListener("load",()=>{
+ renderStaff();
  ensureListening().then(()=>{ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla."; })
  .catch(err=>{ $("status").textContent="Pulsa el micrófono de grabación para autorizar el acceso al audio."; console.warn("La escucha previa no pudo iniciarse automáticamente:",err); });
 });
