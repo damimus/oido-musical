@@ -35,8 +35,10 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1
 <div class="top-groups">
   <div class="live-note" aria-live="polite"><strong id="note">—</strong><span id="freq">Frecuencia fundamental: — Hz</span><span id="pitchInfo">Esperando audio…</span></div>
   <div class="control-card action-group">
+    <h3>Micrófono</h3>
     <div class="controls">
-      <button id="start" class="icon-button" title="Iniciar grabación" aria-label="Iniciar grabación">●</button>
+      <button id="listen" class="utility-button good" title="Activar micrófono para reconocer notas" aria-label="Activar micrófono para reconocer notas">🎙 Escuchar</button>
+      <button id="start" class="icon-button" title="Iniciar grabación de la melodía" aria-label="Iniciar grabación de la melodía" disabled>●</button>
       <button id="stop" class="icon-button alt danger" title="Parar grabación" aria-label="Parar grabación" disabled>■</button>
     </div>
   </div>
@@ -64,7 +66,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1
     </div>
   </div>
 </div>
-<div id="status" role="status" aria-live="polite">Pulsa ● para permitir el micrófono y empezar a grabar.</div><div class="meter"><div id="bar"></div></div>
+<div id="status" role="status" aria-live="polite">Pulsa «🎙 Escuchar» y permite el micrófono para ver la nota detectada. ● empieza a grabar.</div><div class="meter"><div id="bar"></div></div>
 </section>
 <section class="panel">
 <h2>Partitura en pentagrama</h2>
@@ -367,7 +369,7 @@ function exportMIDI(){
  a.href=url;a.download="melodia_detectada.mid";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-// La activación del micrófono se solicita al tocar el botón de grabación.
+// La activación del micrófono se solicita desde un gesto explícito del usuario.
 async function ensureListening(){
  if(an && stream && ctx){
   if(ctx.state==="suspended") await ctx.resume();
@@ -390,6 +392,26 @@ async function ensureListening(){
  an.fftSize=4096; an.smoothingTimeConstant=0; buf=new Float32Array(an.fftSize); src.connect(an);
  if(!raf) raf=requestAnimationFrame(process);
 }
+async function activateListening(){
+ const button=$("listen");
+ button.disabled=true;
+ $("status").textContent="Solicitando permiso para usar el micrófono…";
+ try{
+  await ensureListening();
+  $("start").disabled=false;
+  button.textContent="🎙 Micrófono activo";
+  $("status").textContent="Micrófono activo: toca una nota para verla identificada. ● empieza a grabar la melodía.";
+ }catch(err){
+  button.disabled=false;
+  let msg=err&&err.message?err.message:String(err);
+  if(err&&err.name==="NotAllowedError")msg="Safari no permitió el micrófono. Comprueba Ajustes > Apps > Safari > Micrófono y el permiso del sitio; usa Safari y vuelve a intentarlo.";
+  else if(err&&err.name==="NotFoundError")msg="No se encontró un micrófono disponible en este dispositivo.";
+  else if(err&&err.name==="NotReadableError")msg="El micrófono está ocupado o no se puede usar. Cierra otras apps que lo estén utilizando y vuelve a intentarlo.";
+  else if(err&&err.name==="SecurityError")msg="El navegador bloqueó el micrófono. Abre esta página con HTTPS en Safari.";
+  $("status").textContent="No se ha podido activar el micrófono: "+msg;
+  console.error(err);
+ }
+}
 async function start(){
  if(recording)return;
  const startButton=$("start"),stopButton=$("stop"); startButton.disabled=true;
@@ -403,11 +425,11 @@ async function start(){
  }catch(err){
   startButton.disabled=false;stopButton.disabled=true;
   let msg=err&&err.message?err.message:String(err);
-  if(err&&err.name==="NotAllowedError")msg="Safari no permitió el micrófono. En iPhone, revisa Ajustes > Apps > Safari > Micrófono y el permiso del sitio; después recarga la página y vuelve a pulsar ●.";
+  if(err&&err.name==="NotAllowedError")msg="Safari no permitió el micrófono. Comprueba Ajustes > Apps > Safari > Micrófono y el permiso del sitio.";
   else if(err&&err.name==="NotFoundError")msg="No se encontró un micrófono disponible en este dispositivo.";
   else if(err&&err.name==="NotReadableError")msg="El micrófono está ocupado o no se puede usar. Cierra otras apps que lo estén utilizando y vuelve a intentarlo.";
   else if(err&&err.name==="SecurityError")msg="El navegador bloqueó el micrófono. Abre esta página con HTTPS en Safari.";
-  $("status").textContent="No se ha podido activar el micrófono: "+msg; console.error(err);
+  $("status").textContent="No se ha podido iniciar la grabación: "+msg; console.error(err);
  }
 }
 async function stop(){
@@ -416,7 +438,7 @@ async function stop(){
  if(segment)closeSegment(performance.now()); segment=null; candidateMidi=null;
  $("start").disabled=false;$("stop").disabled=true;
  $("play").disabled=notes.length===0;$("midi").disabled=notes.length===0;updatePlaybackButtons();
- $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla.";
+ $("status").textContent="Micrófono activo: toca una nota para verla identificada. Pulsa ● para grabar otra melodía.";
 }
 window.addEventListener("load",renderStaff);
 
@@ -425,7 +447,7 @@ function clickMetronome(){if(!metroSoundOn)return;const Ctx=window.AudioContext|
 function metronomeTick(){clickMetronome();metroBeat=(metroBeat+1)%4;}
 function restartMetronome(){if(!metroOn)return;clearInterval(metroTimer);metroBeat=0;metronomeTick();metroTimer=setInterval(metronomeTick,60000/currentBpm());}
 function toggleMetronome(){metroOn=!metroOn;if(metroOn){restartMetronome();$("metroToggle").textContent="■";$("metroToggle").title="Detener metrónomo";$("metroToggle").setAttribute("aria-label","Detener metrónomo");$("metroToggle").setAttribute("aria-pressed","true");$("metroToggle").classList.add("danger");}else{clearInterval(metroTimer);metroTimer=null;$("metroToggle").textContent="▶";$("metroToggle").title="Iniciar metrónomo";$("metroToggle").setAttribute("aria-label","Iniciar metrónomo");$("metroToggle").setAttribute("aria-pressed","false");$("metroToggle").classList.remove("danger");}}
-$("start").addEventListener("click",start);$("stop").addEventListener("click",stop);$("play").addEventListener("click",playMelody);$("pause").addEventListener("click",pausePlayback);$("stopPlay").addEventListener("click",()=>stopPlayback(false));$("midi").addEventListener("click",exportMIDI);
+$("listen").addEventListener("click",activateListening);$("start").addEventListener("click",start);$("stop").addEventListener("click",stop);$("play").addEventListener("click",playMelody);$("pause").addEventListener("click",pausePlayback);$("stopPlay").addEventListener("click",()=>stopPlayback(false));$("midi").addEventListener("click",exportMIDI);
 $("tempo").addEventListener("change",()=>{let v=Math.round(currentBpm());$("tempo").value=v;updateTempoInfo();if(notes.length)renderStaff();});
 $("metroToggle").addEventListener("click",toggleMetronome);
 $("metroSound").addEventListener("click",()=>{metroSoundOn=!metroSoundOn;$("metroSound").textContent=metroSoundOn?"🔊":"🔇";$("metroSound").title=metroSoundOn?"Sonido del metrónomo activado":"Sonido del metrónomo desactivado";$("metroSound").setAttribute("aria-label",$("metroSound").title);$("metroSound").setAttribute("aria-pressed",String(metroSoundOn));$("metroSound").classList.toggle("good",metroSoundOn);if(metroOn&&metroSoundOn)clickMetronome();});
