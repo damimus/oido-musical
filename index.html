@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oído Musical — Analizador de melodías</title>
+<style>
+:root{--bg:#f2f8f3;--panel:#fff;--ink:#20352a;--blue:#24734f;--green:#16845b;--border:#d7e7db;--muted:#62776a;--shadow:0 8px 24px rgba(30,80,49,.07)}
+*{box-sizing:border-box}body{margin:0;padding:22px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+main{max-width:1100px;margin:auto}h1{margin:0 0 6px;font-size:clamp(27px,4vw,36px);letter-spacing:-.7px}.sub{color:var(--muted);margin-top:0}.hero{padding:9px 2px 4px}.hero p{margin:0;color:var(--muted)}.panel{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:20px;margin:16px 0;box-shadow:var(--shadow)}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}button{border:0;border-radius:11px;padding:11px 15px;font-size:14px;font-weight:700;cursor:pointer;background:#287b52;color:#fff;transition:transform .12s,filter .12s}button:hover:not(:disabled){filter:brightness(1.04);transform:translateY(-1px)}button.alt{background:#dcefe1;color:#235b3c}button.danger{background:#fcebea;color:#963d3d}button.good{background:#c9ebd2;color:#185d39}button:disabled{opacity:.42;cursor:default;transform:none}
+input[type=number],select{padding:10px 11px;border:1px solid var(--border);border-radius:9px;background:#fff;color:var(--ink);font:inherit}input[type=number]{width:88px}label{font-size:13px;font-weight:650;color:#3f6049}.control-card{background:#edf7ef;border:1px solid #d2e8d7;border-radius:14px;padding:13px;display:flex;flex-direction:column;gap:8px;min-width:0}.control-card .controls{gap:8px}.control-card h3{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:#356447;margin:0}.section-title{display:flex;align-items:center;gap:9px;margin:0 0 14px}.section-title .emoji{width:35px;height:35px;display:grid;place-items:center;background:#dcefe1;border-radius:11px;font-size:18px}.top-groups{display:grid;grid-template-columns:minmax(118px,.8fr) minmax(100px,.7fr) minmax(145px,1fr) minmax(165px,1.05fr) minmax(245px,1.55fr);gap:9px;align-items:stretch}.action-group{display:flex;flex-direction:column;gap:9px;min-width:0}.action-group .controls{gap:7px}.live-note{background:#cdebd5;border-color:#9fcfad;color:#174b2d;min-width:0}.live-note .small,#freq,#pitchInfo{display:none!important}.compact-group{display:flex;flex-direction:column;gap:9px}.utility-card .controls{display:flex;flex-wrap:nowrap;gap:6px}.icon-button{width:42px;min-width:42px;padding:10px 0;font-size:18px;line-height:1;border-radius:10px}.utility-button{flex:1 1 0;min-width:0;padding:9px 7px;font-size:12px;white-space:nowrap}.hidden-info{display:none!important}.tempo-card{display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:8px;padding:11px}.tempo-card .tempo-row{display:flex;align-items:center;gap:7px}.tempo-card .controls{align-items:center;gap:6px}.tempo-card input{width:66px;padding:8px 6px;text-align:center}.tempo-card .tempo-label{font-size:13px;font-weight:750;color:#356447}.metro-button{width:38px;min-width:38px;height:36px;padding:0;font-size:17px;line-height:1;display:inline-grid;place-items:center}.tempo-card h3{margin-bottom:1px}
+#status{margin-top:13px;line-height:1.5;color:#566278;font-size:14px}.meter{height:8px;background:#e6eaf1;border-radius:8px;overflow:hidden;margin-top:12px}.meter>div{height:100%;width:0;background:var(--green)}
+#note{font-size:30px;font-weight:800;line-height:1.1;margin:0}
+#freq,#pitchInfo{display:none!important}
+.live-note{display:flex;flex-direction:column;gap:3px;min-width:0;padding:8px 11px;border:1px solid #9fcfad;border-radius:10px;background:#cdebd5;color:#174b2d}
+@media(max-width:600px){.live-note{width:100%}#note{font-size:28px}}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}.stats>div{background:#f5f7fb;padding:13px;border-radius:10px}.small{font-size:13px;color:#657188;line-height:1.5}.value{font-size:24px;font-weight:750}
+table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}th{background:#f7f9fc}.scroll{overflow-x:hidden}#melody{font-size:20px;line-height:1.8;overflow-wrap:anywhere}
+#staff{display:block;width:100%;background:#fff} .vf-system{width:100%;min-height:130px;background:#fff} .vf-error{padding:18px;color:#963d3d;font-size:14px}
+.staff-line{stroke:#344054;stroke-width:1.2}
+.ledger{stroke:#344054;stroke-width:1.1}
+.note-head{stroke:#172033;stroke-width:1.4}
+.note-label{font-size:11px;fill:#586174;text-anchor:middle}
+@media(max-width:1020px){.top-groups{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.top-groups{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.top-groups{grid-template-columns:repeat(2,minmax(0,1fr))}.live-note{width:auto}.tempo-card{grid-column:span 2}}
+@media(max-width:600px){body{padding:11px}.panel{padding:13px;border-radius:14px}.controls button{flex:1 1 auto}.control-card{padding:11px}.tempo-card{align-items:stretch}.icon-button{flex:0 0 42px!important}.utility-button{flex:1 1 0!important;font-size:11px;padding:9px 4px}}
+</style>
+</head>
+<body><main>
+<header class="hero"><h1>🎼 Oído Musical</h1><p>Analiza melodías, visualiza la partitura y exporta a MIDI.</p></header>
+
+<section class="panel">
+<div class="top-groups">
+  <div class="live-note" aria-live="polite"><strong id="note">—</strong><span id="freq">Frecuencia fundamental: — Hz</span><span id="pitchInfo">Esperando audio…</span></div>
+  <div class="control-card action-group">
+    <div class="controls">
+      <button id="start" class="icon-button" title="Iniciar grabación" aria-label="Iniciar grabación">●</button>
+      <button id="stop" class="icon-button alt danger" title="Parar grabación" aria-label="Parar grabación" disabled>■</button>
+    </div>
+  </div>
+  <div class="control-card action-group">
+    <div class="controls">
+      <button id="play" class="icon-button alt" title="Iniciar reproducción" aria-label="Iniciar reproducción" disabled>▶</button>
+      <button id="pause" class="icon-button alt" title="Pausar reproducción" aria-label="Pausar reproducción" disabled>Ⅱ</button>
+      <button id="stopPlay" class="icon-button alt danger" title="Detener reproducción" aria-label="Detener reproducción" disabled>■</button>
+    </div>
+  </div>
+  <div class="control-card compact-group utility-card">
+    <h3>Melodía</h3>
+    <div class="controls">
+      <button id="midi" class="alt utility-button" title="Exportar melodía a MIDI" aria-label="Exportar melodía a MIDI" disabled>⇩ MIDI</button>
+      <button id="clear" class="alt utility-button" title="Borrar melodía" aria-label="Borrar melodía">⌫ Borrar</button>
+    </div>
+  </div>
+  <div class="control-card tempo-card">
+    <h3>Tempo y metrónomo</h3>
+    <div class="tempo-row">
+      <label class="tempo-label" for="tempo">Tempo</label>
+      <input id="tempo" type="number" min="40" max="240" step="1" value="100" aria-label="Tempo" />
+      <button id="metroToggle" class="good metro-button" title="Iniciar metrónomo" aria-label="Iniciar metrónomo" aria-pressed="false">▶</button>
+      <button id="metroSound" class="good metro-button" title="Sonido del metrónomo activado" aria-label="Sonido del metrónomo activado" aria-pressed="true">🔊</button>
+    </div>
+  </div>
+</div>
+<div id="status" role="status" aria-live="polite"></div><div class="meter"><div id="bar"></div></div>
+</section>
+<section class="panel">
+<h2>Partitura en pentagrama</h2>
+<p class="small">Pentagrama en clave de sol. Las notas se distribuyen automáticamente en nuevas líneas según el ancho de la pantalla.</p>
+<div class="scroll" id="staffScroll" style="overflow-x:auto">
+<div id="staff" role="img" aria-label="Partitura musical generada con VexFlow" style="width:100%;min-height:150px;background:#fff"></div>
+</div>
+</section>
+
+
+</main>
+<script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.5/build/cjs/vexflow.js"></script>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const NOTE_NAMES=["do","do♯","re","mi♭","mi","fa","fa♯","sol","sol♯","la","si♭","si"];
+let ctx=null,stream=null,src=null,an=null,buf=null,raf=0,recording=false,notes=[],segment=null;
+let playbackCtx=null,playbackNodes=[],playbackState="stopped",playbackEndAt=0,metroCtx=null,metroTimer=null,metroOn=false,metroSoundOn=true,metroBeat=0;
+let startTime=0,lastValidTime=0,lastStableMidi=null,candidateMidi=null,candidateSince=0;
+let pitchHistory=[],rmsHistory=[],lastUI=0;
+
+function noteName(m){m=Math.round(m);return NOTE_NAMES[(m%12+12)%12]+(Math.floor(m/12)-1)}
+function midiHz(m){return 440*Math.pow(2,(m-69)/12)}
+function currentBpm(){const v=Number($("tempo")?.value);return Number.isFinite(v)?Math.max(40,Math.min(240,v)):100}
+const STABILITY_MS=125;
+function classifyDuration(s){
+ const beat=60/currentBpm(),items=[["Redonda",4],["Blanca",2],["Negra",1],["Corchea",.5],["Semicorchea",.25]];
+ let best=null,err=Infinity;for(const [name,p] of items){const e=Math.abs(s-beat*p)/(beat*p);if(e<err){err=e;best=name}}
+ return err>.35?"No concluyente":best
+}
+function classifyRestDuration(seconds){
+ const beat=60/currentBpm(),items=[["Blanca",2],["Negra",1],["Corchea",.5],["Semicorchea",.25]];
+ let best=items[0],err=Infinity;
+ for(const item of items){const e=Math.abs(seconds-beat*item[1]);if(e<err){err=e;best=item}}
+ return {figure:best[0],beats:best[1]};
+}
+function addRestBetween(previousEnd,nextStart){
+ if(!notes.length)return;
+ const last=notes[notes.length-1];
+ if(last.type==='rest')return;
+ const gap=Math.max(0,(nextStart-previousEnd)/1000);
+ if(gap<0.12)return; // ignora pequeños huecos de detección entre notas ligadas
+ const r=classifyRestDuration(gap);
+ notes.push({type:'rest',number:notes.length+1,midi:null,note:'Silencio',start:previousEnd,end:nextStart,duration:gap,figure:r.figure,beats:r.beats});
+}
+function median(a){if(!a.length)return null;const b=[...a].sort((x,y)=>x-y),m=Math.floor(b.length/2);return b.length%2?b[m]:(b[m-1]+b[m])/2}
+
+/*
+ YIN-inspired difference-function pitch detector.
+ It searches plausible musical fundamentals and uses normalized difference
+ rather than choosing whichever autocorrelation peak happens to be largest.
+*/
+function detectPitch(x,sr){
+ // Reducir el coste de cálculo: diezmado por 2, conservando margen suficiente para C7.
+ const original=x; const reducedLength=Math.floor(original.length/2);
+ const reduced=new Float32Array(reducedLength);
+ for(let i=0;i<reducedLength;i++) reduced[i]=original[i*2];
+ x=reduced; sr=sr/2;
+ const n=x.length;let mean=0,energy=0;
+ for(let i=0;i<n;i++){mean+=x[i];energy+=x[i]*x[i]}mean/=n;
+ const rms=Math.sqrt(energy/n);if(rms<0.007)return{hz:null,rms,confidence:0};
+ // Rango de reconocimiento do3–do7 (C3–C7): 130,81–2093,00 Hz; margen para desafinación.
+ const minLag=Math.max(2,Math.floor(sr/2155)),maxLag=Math.min(Math.ceil(sr/126),Math.floor(n/2));
+ const d=new Float32Array(maxLag+1);
+ for(let tau=1;tau<=maxLag;tau++){
+  let sum=0;
+  for(let i=0;i<n-tau;i++){
+   const a=x[i]-mean,b=x[i+tau]-mean,z=a-b;
+   sum+=z*z;
+  }
+  d[tau]=sum;
+ }
+ // YIN: cumulative mean normalized difference.
+ // El denominador es la suma desde el retardo 1 hasta el retardo actual,
+ // no la suma total de todos los retardos.
+ const cmnd=new Float32Array(maxLag+1);cmnd[0]=1;
+ let cumulative=0;
+ for(let tau=1;tau<=maxLag;tau++){
+  cumulative+=d[tau];
+  cmnd[tau]=cumulative>0 ? d[tau]*tau/cumulative : 1;
+ }
+ // Pick the first sufficiently deep valley: helps avoid selecting 2x harmonics.
+ const threshold=.14;let tauEstimate=-1;
+ for(let tau=minLag;tau<maxLag-1;tau++){
+  if(cmnd[tau]<threshold){
+   while(tau+1<maxLag&&cmnd[tau+1]<cmnd[tau])tau++;
+   tauEstimate=tau;break;
+  }
+ }
+ if(tauEstimate<0){
+  let best=Infinity;for(let tau=minLag;tau<=maxLag;tau++){if(cmnd[tau]<best){best=cmnd[tau];tauEstimate=tau}}
+  if(best>.30)return{hz:null,rms,confidence:0};
+ }
+ // Parabolic interpolation around the minimum.
+ let shift=0;
+ if(tauEstimate>1&&tauEstimate<maxLag){
+  const a=cmnd[tauEstimate-1],b=cmnd[tauEstimate],c=cmnd[tauEstimate+1],den=a-2*b+c;
+  if(Math.abs(den)>1e-9)shift=Math.max(-.5,Math.min(.5,.5*(a-c)/den));
+ }
+ const hz=sr/(tauEstimate+shift),confidence=1-cmnd[tauEstimate];
+ if(hz<126||hz>2155||confidence<.62)return{hz:null,rms,confidence};
+ return{hz,rms,confidence};
+}
+function closeSegment(end){
+ if(!segment)return;
+ const endTime=Math.max(segment.start,end),dur=(endTime-segment.start)/1000;
+ if(dur>=.065){
+  const hz=median(segment.hzSamples)||midiHz(segment.midi);
+  notes.push({type:"note",number:notes.length+1,midi:segment.midi,note:noteName(segment.midi),hz,start:segment.start,end:endTime,duration:dur,figure:classifyDuration(dur),beats:dur/(60/currentBpm())});
+  renderRows();
+ }
+ segment=null;
+}
+function openSegment(midi,hz,t){
+ if(notes.length){const last=notes[notes.length-1];if(last.type!=='rest')addRestBetween(last.end,t);}
+ segment={midi,start:t,last:t,hzSamples:[hz]};lastStableMidi=midi;
+}
+function process(){
+ if(!an)return;
+ an.getFloatTimeDomainData(buf);
+ const now=performance.now(),p=detectPitch(buf,ctx.sampleRate);
+ $("bar").style.width=Math.min(100,p.rms*250)+"%";
+ if(p.hz){
+  // Convert to nearest equal-tempered semitone; small vibrato stays within same note.
+  const midiFloat=69+12*Math.log2(p.hz/440),midi=Math.round(midiFloat);
+  // Solo reconocer notas de C3 (MIDI 48) a C7 (MIDI 96), inclusive.
+  if(midi<48||midi>96){
+    pitchHistory=[];candidateMidi=null;
+    if(segment&&now-segment.last>115)closeSegment(segment.last);
+    $("note").textContent="Fuera de rango";
+    $("freq").textContent="Rango de reconocimiento: C3–C7";
+    $("pitchInfo").textContent="Las notas admitidas van de C3 a C7.";
+  } else {
+  pitchHistory.push({midi,hz:p.hz,t:now});pitchHistory=pitchHistory.filter(q=>now-q.t<140);
+  const stableHz=median(pitchHistory.filter(q=>q.midi===midi).map(q=>q.hz))||p.hz;
+  $("note").textContent=noteName(midi);
+  $("freq").textContent="Frecuencia fundamental estimada: "+stableHz.toFixed(2)+" Hz";
+  $("pitchInfo").textContent="Confianza de detección: "+Math.round(p.confidence*100)+"% · Desviación: "+(midiFloat-midi>=0?"+":"")+(1200*Math.log2(stableHz/midiHz(midi))).toFixed(0)+" cents";
+  // Modo de escucha previa: muestra la nota en tiempo real, pero no la añade a la partitura.
+  if(!recording){ candidateMidi=midi; candidateSince=now; raf=requestAnimationFrame(process); return; }
+  if(!segment){
+   if(candidateMidi!==midi){candidateMidi=midi;candidateSince=now}
+   if(now-candidateSince>=STABILITY_MS)openSegment(midi,stableHz,candidateSince);
+  }else if(midi===segment.midi){
+   segment.last=now;segment.hzSamples.push(stableHz);if(segment.hzSamples.length>45)segment.hzSamples.shift();
+   candidateMidi=null;
+  }else{
+   if(candidateMidi!==midi){candidateMidi=midi;candidateSince=now}
+   // Only accept a new note after it persists, preventing brief vibrato glitches.
+   if(now-candidateSince>=STABILITY_MS){
+    const changeAt=candidateSince;closeSegment(changeAt);openSegment(midi,stableHz,changeAt);candidateMidi=null;
+   }
+  }
+  lastValidTime=now;
+  }
+ }else{
+  pitchHistory=[];
+  if(segment&&now-segment.last>115){closeSegment(segment.last);candidateMidi=null;lastStableMidi=null}
+  if(now-lastUI>100){$("note").textContent="—";$("freq").textContent="Frecuencia fundamental: — Hz";$("pitchInfo").textContent="Esperando una nota estable…"}
+ }
+ if(recording && now-lastUI>250){
+  $("status").textContent="Grabando… "+((now-startTime)/1000).toFixed(1)+" s. Mantén una sola nota cada vez.";
+  lastUI=now;
+ }
+ raf=requestAnimationFrame(process);
+}
+
+function diatonicIndex(midi){
+ const pc=((midi%12)+12)%12,oct=Math.floor(midi/12)-1;
+ const map={0:0,1:0,2:1,3:1,4:2,5:3,6:3,7:4,8:4,9:5,10:5,11:6};
+ return oct*7+map[pc];
+}
+function noteLetter(midi){
+ const pc=((midi%12)+12)%12;
+ return ["do","do♯","re","mi♭","mi","fa","fa♯","sol","sol♯","la","si♭","si"][pc];
+}
+function vexDuration(n){
+ const base={"Redonda":"w","Blanca":"h","Negra":"q","Corchea":"8","Semicorchea":"16"}[n.figure]||"q";
+ return n.type==="rest"?base+"r":base;
+}
+function vexKey(midi){
+ const pc=((midi%12)+12)%12,oct=Math.floor(midi/12)-1;
+ const map={0:"c",1:"c#",2:"d",3:"eb",4:"e",5:"f",6:"f#",7:"g",8:"g#",9:"a",10:"bb",11:"b"};
+ return map[pc]+"/"+oct;
+}
+function renderStaff(){
+ const container=$("staff");
+ const width=Math.max(300,Math.floor(container.clientWidth||container.parentElement.clientWidth||800));
+ container.innerHTML="";
+ if(!notes.length){container.innerHTML='<div style="padding:25px 12px;color:#657188">Graba una melodía para mostrar la partitura.</div>';return;}
+ if(!window.Vex||!Vex.Flow){container.innerHTML='<div class="vf-error">No se ha podido cargar VexFlow. Comprueba la conexión a Internet y vuelve a abrir la página.</div>';return;}
+ const VF=Vex.Flow, perLine=Math.max(4,Math.floor((width-90)/70)),lineCount=Math.ceil(notes.length/perLine);
+ for(let line=0;line<lineCount;line++){
+   const subset=notes.slice(line*perLine,(line+1)*perLine);
+   const system=document.createElement("div");system.className="vf-system";system.style.height="145px";container.appendChild(system);
+   try{
+    const renderer=new VF.Renderer(system,VF.Renderer.Backends.SVG);
+    renderer.resize(width,145);
+    const context=renderer.getContext();
+    const stave=new VF.Stave(12,18,width-24,{spacing_between_lines_px:10});
+    stave.addClef("treble");stave.setContext(context).draw();
+    const tickables=[];
+    subset.forEach(n=>{
+      const duration=vexDuration(n);
+      const key=n.type==="rest"?"b/4":vexKey(n.midi);
+      const sn=new VF.StaveNote({clef:"treble",keys:[key],duration,auto_stem:true});
+      if(n.type!=="rest"){
+       const pc=((n.midi%12)+12)%12;
+       const acc={1:"#",3:"b",6:"#",8:"#",10:"b"}[pc];
+       if(acc)sn.addModifier(new VF.Accidental(acc),0);
+      }
+      tickables.push(sn);
+    });
+    const voice=new VF.Voice({num_beats:4,beat_value:4});
+    voice.setStrict(false);voice.addTickables(tickables);
+    new VF.Formatter().joinVoices([voice]).format([voice],Math.max(100,width-115));
+    voice.draw(context,stave);
+    // Small labels aid note identification without replacing proper music glyphs.
+    tickables.forEach((tick,i)=>{
+      const label=subset[i].type==="rest"?"sil. "+subset[i].figure.toLowerCase():subset[i].note;
+      const text=new VF.TextNote({text:label, font:{family:"Arial",size:10,weight:"normal"},duration:"q"});
+      text.setStave(stave);text.setContext(context);
+      // TextNote is intentionally not drawn: VexFlow handles the musical symbols and spacing.
+    });
+   }catch(err){
+    system.innerHTML='<div class="vf-error">No se ha podido dibujar esta línea de la partitura. '+String(err.message||err)+'</div>';
+   }
+ }
+}
+function renderRows(){
+ renderStaff();
+}
+function noteBeats(n){
+ const map={"Redonda":4,"Blanca":2,"Negra":1,"Corchea":.5,"Semicorchea":.25};
+ return map[n.figure]||Math.max(.25,Math.min(4,n.duration*currentBpm()/60));
+}
+function updatePlaybackButtons(){
+ const has=notes.length>0;
+ $("play").disabled=!has||playbackState==="playing";
+ $("pause").disabled=playbackState!=="playing"&&playbackState!=="paused";
+ $("stopPlay").disabled=playbackState==="stopped";
+}
+async function playMelody(){
+ if(!notes.length)return;
+ if(playbackState==="paused"&&playbackCtx){await playbackCtx.resume();playbackState="playing";armPlaybackEndTimer();$("status").textContent="Reproduciendo melodía…";updatePlaybackButtons();return;}
+ if(playbackState!=="stopped")await stopPlayback(false);
+ const AudioCtx=window.AudioContext||window.webkitAudioContext;
+ if(!AudioCtx){$("status").textContent="Este navegador no admite reproducción de audio.";return;}
+ playbackCtx=new AudioCtx();await playbackCtx.resume();playbackNodes=[];playbackState="playing";
+ const beat=60/currentBpm();let t=playbackCtx.currentTime+.12;
+ notes.forEach(n=>{
+  const dur=Math.max(.04,noteBeats(n)*beat);
+  if(n.type!=="rest"){ // Los silencios solo avanzan el cursor temporal: nunca generan sonido.
+   const o=playbackCtx.createOscillator(),g=playbackCtx.createGain();
+   o.type="sine";o.frequency.value=midiHz(n.midi);g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(.16,t+.012);g.gain.setValueAtTime(.16,Math.max(t+.013,t+dur-.025));g.gain.linearRampToValueAtTime(.0001,t+dur);
+   o.connect(g);g.connect(playbackCtx.destination);o.start(t);o.stop(t+dur+.03);playbackNodes.push(o);
+  }
+  t+=dur;
+ });
+ playbackEndAt=t;armPlaybackEndTimer();
+ $("status").textContent=`Reproduciendo la melodía a ${currentBpm()} BPM.`;updatePlaybackButtons();
+}
+let playbackEndTimer=null;
+function armPlaybackEndTimer(){clearTimeout(playbackEndTimer);if(!playbackCtx)return;const remaining=Math.max(0,(playbackEndAt-playbackCtx.currentTime)*1000);playbackEndTimer=setTimeout(()=>{if(playbackState==="playing")stopPlayback(true)},remaining+100);}
+async function pausePlayback(){if(playbackState!=="playing"||!playbackCtx)return;await playbackCtx.suspend();playbackState="paused";clearTimeout(playbackEndTimer);$("status").textContent="Reproducción en pausa. Pulsa ▶ Reproducir para continuar.";updatePlaybackButtons();}
+async function stopPlayback(ended=false){
+ clearTimeout(playbackEndTimer);playbackEndTimer=null;
+ playbackNodes.forEach(o=>{try{o.stop()}catch(_){}});playbackNodes=[];
+ if(playbackCtx){try{await playbackCtx.close()}catch(_){}playbackCtx=null;}
+ playbackState="stopped";playbackEndAt=0;updatePlaybackButtons();
+ if(ended)$("status").textContent="Reproducción finalizada.";
+ else if(notes.length)$("status").textContent="Reproducción detenida.";
+}
+
+
+function writeVarLen(value){
+ let v=Math.max(0,Math.floor(value)),buffer=v&0x7f;const bytes=[];
+ while((v>>=7)>0){buffer<<=8;buffer|=((v&0x7f)|0x80)}
+ while(true){bytes.push(buffer&255);if(buffer&128)buffer>>=8;else break}
+ return bytes;
+}
+function exportMIDI(){
+ if(!notes.length)return;
+ const ppq=480,tempo=Math.round(60000000/currentBpm()),events=[];let tick=0;
+ for(const n of notes){
+  const startTick=tick,endTick=startTick+Math.max(1,Math.round(noteBeats(n)*ppq));
+  if(n.type!=="rest"){
+   const pitch=Math.max(0,Math.min(127,n.midi));
+   events.push({tick:startTick,data:[0x90,pitch,90]},{tick:endTick,data:[0x80,pitch,0]});
+  }
+  tick=endTick; // los silencios avanzan el tiempo MIDI sin generar notas
+ }
+ events.sort((a,b)=>a.tick-b.tick || (a.data[0]===0x80?-1:1));
+ const track=[0,0xff,0x51,3,(tempo>>16)&255,(tempo>>8)&255,tempo&255];let last=0;
+ for(const e of events){track.push(...writeVarLen(e.tick-last),...e.data);last=e.tick}
+ track.push(0,0xff,0x2f,0);
+ const u32=v=>[(v>>>24)&255,(v>>>16)&255,(v>>>8)&255,v&255],u16=v=>[(v>>>8)&255,v&255];
+ const bytes=[0x4d,0x54,0x68,0x64,...u32(6),...u16(0),...u16(1),...u16(ppq),0x4d,0x54,0x72,0x6b,...u32(track.length),...track];
+ const url=URL.createObjectURL(new Blob([new Uint8Array(bytes)],{type:"audio/midi"})),a=document.createElement("a");
+ a.href=url;a.download="melodia_detectada.mid";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// Inicio y parada de grabación. Se definen explícitamente antes de enlazar los botones.
+async function ensureListening(){
+ if(an && stream && ctx){ if(ctx.state==="suspended") await ctx.resume(); return; }
+ if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Safari necesita una página HTTPS o localhost para acceder al micrófono.");
+ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+ const AudioCtx=window.AudioContext||window.webkitAudioContext;
+ if(!AudioCtx) throw new Error("Este navegador no admite Web Audio API.");
+ ctx=new AudioCtx(); await ctx.resume(); src=ctx.createMediaStreamSource(stream); an=ctx.createAnalyser();
+ an.fftSize=4096; an.smoothingTimeConstant=0; buf=new Float32Array(an.fftSize); src.connect(an);
+ if(!raf) raf=requestAnimationFrame(process);
+}
+async function start(){
+ if(recording)return;
+ const startButton=$("start"),stopButton=$("stop"); startButton.disabled=true;
+ try{
+  $("status").textContent="Preparando grabación…";
+  await ensureListening(); await stopPlayback(false);
+  recording=true; startTime=performance.now(); lastValidTime=startTime; lastUI=0;
+  segment=null; candidateMidi=null; candidateSince=0; lastStableMidi=null; pitchHistory=[]; rmsHistory=[];
+  startButton.disabled=true;stopButton.disabled=false;$("play").disabled=true;$("midi").disabled=true;
+  $("status").textContent="Grabando…";
+ }catch(err){
+  startButton.disabled=false;stopButton.disabled=true;
+  let msg=err&&err.message?err.message:String(err);
+  if(err&&err.name==="NotAllowedError")msg="Permiso de micrófono denegado. En Safari, ve a Ajustes > Sitios web > Micrófono.";
+  $("status").textContent="No se ha podido activar el micrófono: "+msg; console.error(err);
+ }
+}
+async function stop(){
+ if(!recording)return;
+ recording=false;
+ if(segment)closeSegment(performance.now()); segment=null; candidateMidi=null;
+ $("start").disabled=false;$("stop").disabled=true;
+ $("play").disabled=notes.length===0;$("midi").disabled=notes.length===0;updatePlaybackButtons();
+ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla.";
+}
+// Inicia la escucha previa al cargar la aplicación. La detección se muestra en pantalla,
+// pero no se registra ninguna nota hasta pulsar el botón de grabación.
+window.addEventListener("load",()=>{
+ ensureListening().then(()=>{ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla."; })
+ .catch(err=>{ $("status").textContent="Pulsa el micrófono de grabación para autorizar el acceso al audio."; console.warn("La escucha previa no pudo iniciarse automáticamente:",err); });
+});
+
+function updateTempoInfo(){const bpm=currentBpm(),info=$("tempoInfo");if(info)info.textContent=`A ${bpm} BPM, una negra dura ${(60/bpm).toFixed(2)} s. Las figuras, la reproducción y el archivo MIDI se ajustan a este tempo.`;if(metroOn)restartMetronome();}
+function clickMetronome(){if(!metroSoundOn)return;const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;if(!metroCtx)metroCtx=new Ctx();if(metroCtx.state==="suspended")metroCtx.resume();const t=metroCtx.currentTime,o=metroCtx.createOscillator(),g=metroCtx.createGain();o.type="sine";/* Tono grave por debajo de C3 (130,81 Hz): A1 = 55 Hz. */o.frequency.value=metroBeat===0?55:48;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.22,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.075);o.connect(g);g.connect(metroCtx.destination);o.start(t);o.stop(t+.08);}
+function metronomeTick(){clickMetronome();metroBeat=(metroBeat+1)%4;}
+function restartMetronome(){if(!metroOn)return;clearInterval(metroTimer);metroBeat=0;metronomeTick();metroTimer=setInterval(metronomeTick,60000/currentBpm());}
+function toggleMetronome(){metroOn=!metroOn;if(metroOn){restartMetronome();$("metroToggle").textContent="■";$("metroToggle").title="Detener metrónomo";$("metroToggle").setAttribute("aria-label","Detener metrónomo");$("metroToggle").setAttribute("aria-pressed","true");$("metroToggle").classList.add("danger");}else{clearInterval(metroTimer);metroTimer=null;$("metroToggle").textContent="▶";$("metroToggle").title="Iniciar metrónomo";$("metroToggle").setAttribute("aria-label","Iniciar metrónomo");$("metroToggle").setAttribute("aria-pressed","false");$("metroToggle").classList.remove("danger");}}
+$("start").addEventListener("click",start);$("stop").addEventListener("click",stop);$("play").addEventListener("click",playMelody);$("pause").addEventListener("click",pausePlayback);$("stopPlay").addEventListener("click",()=>stopPlayback(false));$("midi").addEventListener("click",exportMIDI);
+$("tempo").addEventListener("change",()=>{let v=Math.round(currentBpm());$("tempo").value=v;updateTempoInfo();if(notes.length)renderStaff();});
+$("metroToggle").addEventListener("click",toggleMetronome);
+$("metroSound").addEventListener("click",()=>{metroSoundOn=!metroSoundOn;$("metroSound").textContent=metroSoundOn?"🔊":"🔇";$("metroSound").title=metroSoundOn?"Sonido del metrónomo activado":"Sonido del metrónomo desactivado";$("metroSound").setAttribute("aria-label",$("metroSound").title);$("metroSound").setAttribute("aria-pressed",String(metroSoundOn));$("metroSound").classList.toggle("good",metroSoundOn);if(metroOn&&metroSoundOn)clickMetronome();});
+window.addEventListener("resize",()=>renderStaff());
+$("clear").addEventListener("click",async()=>{if(recording)return;await stopPlayback(false);notes=[];renderRows();$("note").textContent="—";$("freq").textContent="Frecuencia fundamental: — Hz";$("pitchInfo").textContent="Esperando audio…";$("midi").disabled=true;updatePlaybackButtons();$("status").textContent=""});
+updateTempoInfo();updatePlaybackButtons();
+
+</script></body></html>
