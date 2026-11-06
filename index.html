@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Oído Musical — Analizador de melodías</title>
+<title>Analizador de melodías — detector mejorado</title>
 <style>
 :root{--bg:#f2f8f3;--panel:#fff;--ink:#20352a;--blue:#24734f;--green:#16845b;--border:#d7e7db;--muted:#62776a;--shadow:0 8px 24px rgba(30,80,49,.07)}
 *{box-sizing:border-box}body{margin:0;padding:22px;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
@@ -29,14 +29,14 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1
 </style>
 </head>
 <body><main>
-<header class="hero"><h1>🎼 Oído Musical</h1><p>Analiza melodías, visualiza la partitura y exporta a MIDI.</p></header>
+<header class="hero"><h1>🎼 Analizador de melodías</h1></header>
 
 <section class="panel">
 <div class="top-groups">
-  <div class="live-note" aria-live="polite"><strong id="note">—</strong><span id="freq">Frecuencia fundamental: — Hz</span><span id="pitchInfo">Esperando audio…</span>  </div>
+  <div class="live-note" aria-live="polite"><strong id="note">—</strong><span id="freq">Frecuencia fundamental: — Hz</span><span id="pitchInfo">Esperando audio…</span></div>
   <div class="control-card action-group">
     <div class="controls">
-      <button id="start" class="icon-button" title="Iniciar grabación y activar el micrófono" aria-label="Iniciar grabación y activar el micrófono">●</button>
+      <button id="start" class="icon-button" title="Iniciar grabación" aria-label="Iniciar grabación">●</button>
       <button id="stop" class="icon-button alt danger" title="Parar grabación" aria-label="Parar grabación" disabled>■</button>
     </div>
   </div>
@@ -59,12 +59,13 @@ table{width:100%;border-collapse:collapse}th,td{padding:10px 8px;border-bottom:1
     <div class="tempo-row">
       <label class="tempo-label" for="tempo">Tempo</label>
       <input id="tempo" type="number" min="40" max="240" step="1" value="100" aria-label="Tempo" />
+      <span id="tempoInfo" class="hidden-info" aria-live="polite"></span>
       <button id="metroToggle" class="good metro-button" title="Iniciar metrónomo" aria-label="Iniciar metrónomo" aria-pressed="false">▶</button>
       <button id="metroSound" class="good metro-button" title="Sonido del metrónomo activado" aria-label="Sonido del metrónomo activado" aria-pressed="true">🔊</button>
     </div>
   </div>
 </div>
-<div id="status" role="status" aria-live="polite">Pulsa ● para activar el micrófono y empezar a grabar la melodía.</div><div class="meter"><div id="bar"></div></div>
+<div id="status" role="status" aria-live="polite"></div><div class="meter"><div id="bar"></div></div>
 </section>
 <section class="panel">
 <h2>Partitura en pentagrama</h2>
@@ -367,40 +368,16 @@ function exportMIDI(){
  a.href=url;a.download="melodia_detectada.mid";a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-// La activación del micrófono se solicita desde un gesto explícito del usuario.
+// Inicio y parada de grabación. Se definen explícitamente antes de enlazar los botones.
 async function ensureListening(){
- if(an && stream && ctx){
-  if(ctx.state==="suspended") await ctx.resume();
-  return;
- }
+ if(an && stream && ctx){ if(ctx.state==="suspended") await ctx.resume(); return; }
  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("Safari necesita una página HTTPS o localhost para acceder al micrófono.");
+ stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
  const AudioCtx=window.AudioContext||window.webkitAudioContext;
  if(!AudioCtx) throw new Error("Este navegador no admite Web Audio API.");
- const existingStream=stream;
- const activeStream=existingStream||await navigator.mediaDevices.getUserMedia({audio:true});
- let audioContext=ctx;
- try{
-  // iOS Safari requires microphone capture to start before Web Audio selects
-  // its audio-session category; otherwise capture can be rejected.
-  if(!audioContext)audioContext=new AudioCtx();
-  if(audioContext.state==="suspended")await audioContext.resume();
-  const source=audioContext.createMediaStreamSource(activeStream);
-  const analyser=audioContext.createAnalyser();
-  analyser.fftSize=4096; analyser.smoothingTimeConstant=0;
-  const audioBuffer=new Float32Array(analyser.fftSize);
-  source.connect(analyser);
-  ctx=audioContext; stream=activeStream; src=source; an=analyser; buf=audioBuffer;
-  if(!raf) raf=requestAnimationFrame(process);
- }catch(err){
-  if(!existingStream){
-   activeStream.getTracks().forEach(track=>track.stop());
-   stream=null;
-  }
-  if(audioContext&&!ctx){
-   try{await audioContext.close()}catch(_){}
-  }
-  throw err;
- }
+ ctx=new AudioCtx(); await ctx.resume(); src=ctx.createMediaStreamSource(stream); an=ctx.createAnalyser();
+ an.fftSize=4096; an.smoothingTimeConstant=0; buf=new Float32Array(an.fftSize); src.connect(an);
+ if(!raf) raf=requestAnimationFrame(process);
 }
 async function start(){
  if(recording)return;
@@ -415,11 +392,8 @@ async function start(){
  }catch(err){
   startButton.disabled=false;stopButton.disabled=true;
   let msg=err&&err.message?err.message:String(err);
-  if(err&&err.name==="NotAllowedError")msg="Safari no permitió el micrófono. Comprueba Ajustes > Apps > Safari > Micrófono y el permiso del sitio.";
-  else if(err&&err.name==="NotFoundError")msg="No se encontró un micrófono disponible en este dispositivo.";
-  else if(err&&err.name==="NotReadableError")msg="El micrófono está ocupado o no se puede usar. Cierra otras apps que lo estén utilizando y vuelve a intentarlo.";
-  else if(err&&err.name==="SecurityError")msg="El navegador bloqueó el micrófono. Abre esta página con HTTPS en Safari.";
-  $("status").textContent="No se ha podido iniciar la grabación: "+msg; console.error(err);
+  if(err&&err.name==="NotAllowedError")msg="Permiso de micrófono denegado. En Safari, ve a Ajustes > Sitios web > Micrófono.";
+  $("status").textContent="No se ha podido activar el micrófono: "+msg; console.error(err);
  }
 }
 async function stop(){
@@ -428,11 +402,16 @@ async function stop(){
  if(segment)closeSegment(performance.now()); segment=null; candidateMidi=null;
  $("start").disabled=false;$("stop").disabled=true;
  $("play").disabled=notes.length===0;$("midi").disabled=notes.length===0;updatePlaybackButtons();
- $("status").textContent="Micrófono activo: toca una nota para verla identificada. Pulsa ● para grabar otra melodía.";
+ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla.";
 }
-window.addEventListener("load",renderStaff);
+// Inicia la escucha previa al cargar la aplicación. La detección se muestra en pantalla,
+// pero no se registra ninguna nota hasta pulsar el botón de grabación.
+window.addEventListener("load",()=>{
+ ensureListening().then(()=>{ $("status").textContent="Escucha previa activa: toca para comprobar la nota; pulsa grabar para registrarla."; })
+ .catch(err=>{ $("status").textContent="Pulsa el micrófono de grabación para autorizar el acceso al audio."; console.warn("La escucha previa no pudo iniciarse automáticamente:",err); });
+});
 
-function updateTempoInfo(){const bpm=currentBpm(),info=$("tempoInfo");if(info)info.textContent=`A ${bpm} BPM, una negra dura ${(60/bpm).toFixed(2)} s. Las figuras, la reproducción y el archivo MIDI se ajustan a este tempo.`;if(metroOn)restartMetronome();}
+function updateTempoInfo(){const bpm=currentBpm();$("tempoInfo").textContent=`A ${bpm} BPM, una negra dura ${(60/bpm).toFixed(2)} s. Las figuras, la reproducción y el archivo MIDI se ajustan a este tempo.`;if(metroOn)restartMetronome();}
 function clickMetronome(){if(!metroSoundOn)return;const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;if(!metroCtx)metroCtx=new Ctx();if(metroCtx.state==="suspended")metroCtx.resume();const t=metroCtx.currentTime,o=metroCtx.createOscillator(),g=metroCtx.createGain();o.type="sine";/* Tono grave por debajo de C3 (130,81 Hz): A1 = 55 Hz. */o.frequency.value=metroBeat===0?55:48;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.22,t+.004);g.gain.exponentialRampToValueAtTime(.0001,t+.075);o.connect(g);g.connect(metroCtx.destination);o.start(t);o.stop(t+.08);}
 function metronomeTick(){clickMetronome();metroBeat=(metroBeat+1)%4;}
 function restartMetronome(){if(!metroOn)return;clearInterval(metroTimer);metroBeat=0;metronomeTick();metroTimer=setInterval(metronomeTick,60000/currentBpm());}
